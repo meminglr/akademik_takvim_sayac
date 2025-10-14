@@ -5,9 +5,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_timer_countdown/flutter_timer_countdown.dart';
 
 class Home extends StatefulWidget {
-  const Home({super.key, required this.enabledCategories});
+  const Home({
+    super.key,
+    required this.enabledCategories,
+    required this.onToggleCategory,
+  });
 
   final Set<String> enabledCategories;
+  final void Function(String category, bool enabled) onToggleCategory;
 
   @override
   State<Home> createState() => _HomeState();
@@ -37,7 +42,7 @@ class _HomeState extends State<Home> {
   Future<void> _loadSelectedTerm() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_prefsSelectedTermKey);
-    if (value == 'Güz' || value == 'Bahar') {
+    if (value == 'Güz' || value == 'Bahar' || value == 'Diğer') {
       setState(() => selectedTerm = value!);
     }
   }
@@ -57,7 +62,10 @@ class _HomeState extends State<Home> {
           q.isEmpty ||
           item.title.toLowerCase().contains(q) ||
           (item.notes?.toLowerCase().contains(q) ?? false);
-      return item.period == selectedTerm &&
+      final periodMatches = selectedTerm == 'Diğer'
+          ? (item.period != 'Güz' && item.period != 'Bahar')
+          : item.period == selectedTerm;
+      return periodMatches &&
           item.end.isAfter(now) &&
           widget.enabledCategories.contains(category) &&
           matchesQuery;
@@ -77,6 +85,7 @@ class _HomeState extends State<Home> {
                         segments: const [
                           ButtonSegment(value: 'Güz', label: Text('Güz')),
                           ButtonSegment(value: 'Bahar', label: Text('Bahar')),
+                          ButtonSegment(value: 'Diğer', label: Text('Diğer')),
                         ],
                         selected: {selectedTerm},
                         onSelectionChanged: (Set<String> newSelection) {
@@ -86,6 +95,91 @@ class _HomeState extends State<Home> {
                           _saveSelectedTerm();
                         },
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Filtreler',
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          useSafeArea: true,
+                          isScrollControlled: true,
+                          showDragHandle: true,
+                          builder: (ctx) {
+                            final localEnabled = Set<String>.of(
+                              widget.enabledCategories,
+                            );
+                            return FractionallySizedBox(
+                              heightFactor: 0.9,
+                              child: StatefulBuilder(
+                                builder: (context, setModalState) {
+                                  return ListView(
+                                    children: [
+                                      const Padding(
+                                        padding: EdgeInsets.fromLTRB(
+                                          16,
+                                          16,
+                                          16,
+                                          8,
+                                        ),
+                                        child: Text(
+                                          'Gösterilecek bölümleri seçin',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      ...EventCategories.all.map(
+                                        (cat) => SwitchListTile.adaptive(
+                                          title: Text(cat),
+                                          value: localEnabled.contains(cat),
+                                          onChanged: (v) {
+                                            setModalState(() {
+                                              if (v) {
+                                                localEnabled.add(cat);
+                                              } else {
+                                                localEnabled.remove(cat);
+                                              }
+                                            });
+                                            widget.onToggleCategory(cat, v);
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                        ),
+                                        child: FilledButton.tonal(
+                                          onPressed: () {
+                                            setModalState(() {
+                                              localEnabled
+                                                ..clear()
+                                                ..add(EventCategories.exams);
+                                            });
+                                            for (final cat
+                                                in EventCategories.all) {
+                                              widget.onToggleCategory(
+                                                cat,
+                                                cat == EventCategories.exams,
+                                              );
+                                            }
+                                          },
+                                          child: const Text(
+                                            'Varsayılanı Yükle (Sadece sınavlar)',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 24),
+                                    ],
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      icon: const Icon(Icons.tune_rounded),
                     ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
@@ -154,7 +248,7 @@ class _HomeState extends State<Home> {
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Text(
-                        'Filtreler sekmesinden göstermek istediğiniz bölümleri seçebilirsiniz.',
+                        'Üstteki filtre düğmesinden göstermek istediğiniz bölümleri seçebilirsiniz.',
                         textAlign: TextAlign.center,
                       ),
                     ),
