@@ -1,6 +1,6 @@
 # MaunSayaç
 
-MAUN (Muğla Sıtkı Koçman Üniversitesi) akademik takvimi için geri sayım uygulaması.
+MAUN (Muş Alparslan Üniversitesi) akademik takvimi için geri sayım uygulaması.
 
 ## Özellikler
 
