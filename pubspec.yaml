@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   flutter_timer_countdown: ^1.0.7
   shared_preferences: ^2.3.3
+  flutter_native_splash: ^2.3.2
+  flutter_launcher_icons: ^0.13.1
 
 dev_dependencies:
   flutter_test:
@@ -19,3 +21,21 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/app_icon/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/app_icon/maun.png"
+  adaptive_icon_background: "#0D90A7"
+  adaptive_icon_foreground: "assets/app_icon/maun.png"
+  min_sdk_android: 21
+
+flutter_native_splash:
+  color: "#0D90A7"
+  image: assets/app_icon/maun.png
+  android_12:
+    image: assets/app_icon/maun.png
+    icon_background_color: "#0D90A7"
+  web: false

@@ -64,7 +64,8 @@ class _AppShellState extends State<AppShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Maun Akademik Sayaç'),
+        scrolledUnderElevation: 0,
+        title: const Text('Maun AkademikSayaç'),
         centerTitle: true,
       ),
       body: pages[_currentIndex],
@@ -77,8 +78,8 @@ class _AppShellState extends State<AppShell> {
             label: 'Sayaçlar',
           ),
           NavigationDestination(
-            icon: Icon(Icons.table_chart_rounded),
-            label: 'Tablo',
+            icon: Icon(Icons.table_chart_outlined),
+            label: 'Akademik Takvim',
           ),
         ],
       ),

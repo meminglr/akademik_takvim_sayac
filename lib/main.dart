@@ -1,8 +1,14 @@
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:akademik_takvim_sayac/shell.dart';
 import 'package:flutter/material.dart';
 
 void main() {
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
   runApp(const MainApp());
+
+  FlutterNativeSplash.remove();
 }
 
 class MainApp extends StatelessWidget {
@@ -16,6 +22,12 @@ class MainApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF3B82F6),
         scaffoldBackgroundColor: const Color(0xFFF7F7F8),
+
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Color(0xFFF7F7F8),
+        ),
         cardTheme: const CardThemeData(
           elevation: 0,
           margin: EdgeInsets.symmetric(horizontal: 12, vertical: 8),

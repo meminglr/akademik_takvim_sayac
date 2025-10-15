@@ -25,6 +25,8 @@ class _HomeState extends State<Home> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   static const _prefsSelectedTermKey = 'selectedTerm';
+  static const _prefsHiddenItemsKey = 'hiddenItems';
+  Set<String> _hiddenItems = {};
 
   @override
   void dispose() {
@@ -37,6 +39,7 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     _loadSelectedTerm();
+    _loadHiddenItems();
   }
 
   Future<void> _loadSelectedTerm() async {
@@ -52,24 +55,51 @@ class _HomeState extends State<Home> {
     await prefs.setString(_prefsSelectedTermKey, selectedTerm);
   }
 
+  Future<void> _loadHiddenItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    final items = prefs.getStringList(_prefsHiddenItemsKey);
+    if (items != null) {
+      setState(() => _hiddenItems = items.toSet());
+    }
+  }
+
+  Future<void> _saveHiddenItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_prefsHiddenItemsKey, _hiddenItems.toList());
+  }
+
+  void _hideItem(String itemId) {
+    setState(() => _hiddenItems.add(itemId));
+    _saveHiddenItems();
+  }
+
+  void _showItem(String itemId) {
+    setState(() => _hiddenItems.remove(itemId));
+    _saveHiddenItems();
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final filteredItems = akademikTakvim.where((item) {
-      final category = deriveCategory(item);
-      final q = searchQuery.trim().toLowerCase();
-      final matchesQuery =
-          q.isEmpty ||
-          item.title.toLowerCase().contains(q) ||
-          (item.notes?.toLowerCase().contains(q) ?? false);
-      final periodMatches = selectedTerm == 'Diğer'
-          ? (item.period != 'Güz' && item.period != 'Bahar')
-          : item.period == selectedTerm;
-      return periodMatches &&
-          item.end.isAfter(now) &&
-          widget.enabledCategories.contains(category) &&
-          matchesQuery;
-    }).toList();
+    final filteredItems =
+        akademikTakvim.where((item) {
+          final category = deriveCategory(item);
+          final q = searchQuery.trim().toLowerCase();
+          final matchesQuery =
+              q.isEmpty ||
+              item.title.toLowerCase().contains(q) ||
+              (item.notes?.toLowerCase().contains(q) ?? false);
+          final periodMatches = selectedTerm == 'Diğer'
+              ? (item.period != 'Güz' && item.period != 'Bahar')
+              : item.period == selectedTerm;
+          return periodMatches &&
+              item.end.isAfter(now) &&
+              widget.enabledCategories.contains(category) &&
+              !_hiddenItems.contains(item.title) &&
+              matchesQuery;
+        }).toList()..sort(
+          (a, b) => a.start.compareTo(b.start),
+        ); // Add this line to sort by start date
 
     return Center(
       child: Column(
@@ -82,6 +112,7 @@ class _HomeState extends State<Home> {
                   children: [
                     Expanded(
                       child: SegmentedButton<String>(
+                        showSelectedIcon: false,
                         segments: const [
                           ButtonSegment(value: 'Güz', label: Text('Güz')),
                           ButtonSegment(value: 'Bahar', label: Text('Bahar')),
@@ -103,78 +134,117 @@ class _HomeState extends State<Home> {
                         showModalBottomSheet(
                           context: context,
                           useSafeArea: true,
+                          isDismissible: true,
+                          enableDrag: true,
                           isScrollControlled: true,
                           showDragHandle: true,
                           builder: (ctx) {
                             final localEnabled = Set<String>.of(
                               widget.enabledCategories,
                             );
-                            return FractionallySizedBox(
-                              heightFactor: 0.9,
-                              child: StatefulBuilder(
-                                builder: (context, setModalState) {
-                                  return ListView(
-                                    children: [
-                                      const Padding(
-                                        padding: EdgeInsets.fromLTRB(
-                                          16,
-                                          16,
-                                          16,
-                                          8,
-                                        ),
-                                        child: Text(
-                                          'Gösterilecek bölümleri seçin',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
+                            return DraggableScrollableSheet(
+                              expand: false,
+                              initialChildSize: 0.6, // increased from 0.4
+                              minChildSize: 0.3, // increased from 0.2
+                              maxChildSize: 0.9, // increased from 0.75
+                              builder: (context, scrollController) {
+                                return StatefulBuilder(
+                                  builder: (context, setModalState) {
+                                    return ListView(
+                                      controller: scrollController,
+                                      shrinkWrap: true,
+                                      children: [
+                                        const Padding(
+                                          padding: EdgeInsets.fromLTRB(
+                                            16,
+                                            16,
+                                            16,
+                                            8,
+                                          ),
+                                          child: Text(
+                                            'Gösterilecek bölümleri seçin',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      ...EventCategories.all.map(
-                                        (cat) => SwitchListTile.adaptive(
-                                          title: Text(cat),
-                                          value: localEnabled.contains(cat),
-                                          onChanged: (v) {
-                                            setModalState(() {
-                                              if (v) {
-                                                localEnabled.add(cat);
-                                              } else {
-                                                localEnabled.remove(cat);
+                                        if (_hiddenItems.isNotEmpty) ...[
+                                          const Padding(
+                                            padding: EdgeInsets.fromLTRB(
+                                              16,
+                                              16,
+                                              16,
+                                              8,
+                                            ),
+                                            child: Text(
+                                              'Gizlenen Sayaçlar',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          ..._hiddenItems.map(
+                                            (title) => ListTile(
+                                              title: Text(title),
+                                              trailing: TextButton(
+                                                child: const Text('Göster'),
+                                                onPressed: () {
+                                                  setModalState(() {
+                                                    _showItem(title);
+                                                  });
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                          const Divider(),
+                                        ],
+                                        ...EventCategories.all.map(
+                                          (cat) => SwitchListTile.adaptive(
+                                            title: Text(cat),
+                                            value: localEnabled.contains(cat),
+                                            onChanged: (v) {
+                                              setModalState(() {
+                                                if (v) {
+                                                  localEnabled.add(cat);
+                                                } else {
+                                                  localEnabled.remove(cat);
+                                                }
+                                              });
+                                              widget.onToggleCategory(cat, v);
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                          ),
+                                          child: FilledButton.tonal(
+                                            onPressed: () {
+                                              setModalState(() {
+                                                localEnabled
+                                                  ..clear()
+                                                  ..add(EventCategories.exams);
+                                              });
+                                              for (final cat
+                                                  in EventCategories.all) {
+                                                widget.onToggleCategory(
+                                                  cat,
+                                                  cat == EventCategories.exams,
+                                                );
                                               }
-                                            });
-                                            widget.onToggleCategory(cat, v);
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                        ),
-                                        child: FilledButton.tonal(
-                                          onPressed: () {
-                                            setModalState(() {
-                                              localEnabled
-                                                ..clear()
-                                                ..add(EventCategories.exams);
-                                            });
-                                            for (final cat
-                                                in EventCategories.all) {
-                                              widget.onToggleCategory(
-                                                cat,
-                                                cat == EventCategories.exams,
-                                              );
-                                            }
-                                          },
-                                          child: const Text(
-                                            'Varsayılanı Yükle (Sadece sınavlar)',
+                                            },
+                                            child: const Text(
+                                              'Varsayılanı Yükle (Sadece sınavlar)',
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 24),
-                                    ],
-                                  );
-                                },
-                              ),
+                                        const SizedBox(height: 24),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
                             );
                           },
                         );
@@ -259,87 +329,113 @@ class _HomeState extends State<Home> {
           else
             Expanded(
               child: ListView.builder(
+                physics: BouncingScrollPhysics(),
                 itemCount: filteredItems.length,
                 itemBuilder: (itemBuilder, index) {
                   var item = filteredItems[index];
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.event,
-                                size: 16,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withOpacity(0.6),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _formatDateRange(item.start, item.end),
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          if (_isSameDay(item.start, item.end))
-                            _CountdownBox(
-                              color: _endColor(item.end, now, context),
-                              child: _buildCountdownContent(
-                                context: context,
-                                label: 'Etkinliğe kalan',
-                                target: item.end,
-                                now: now,
-                                finishedText: 'Bitti',
-                                color: _endColor(item.end, now, context),
-                              ),
-                            )
-                          else ...[
-                            _CountdownBox(
-                              color: _startColor(item.start, now, context),
-                              child: _buildCountdownContent(
-                                context: context,
-                                label: 'Başlangıca kalan',
-                                target: item.start,
-                                now: now,
-                                finishedText: 'Başladı',
-                                color: _startColor(item.start, now, context),
-                              ),
+                  return Dismissible(
+                    key: Key(item.title),
+                    direction:
+                        DismissDirection.horizontal, // Allow both directions
+                    onDismissed: (_) => _hideItem(item.title),
+                    background: Container(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Icon(
+                        Icons.visibility_off,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    secondaryBackground: Container(
+                      // Add secondary background for right-to-left swipe
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Icon(
+                        Icons.visibility_off,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 8),
-                            _CountdownBox(
-                              color: _endColor(item.end, now, context),
-                              child: _buildCountdownContent(
-                                context: context,
-                                label: 'Bitişe kalan',
-                                target: item.end,
-                                now: now,
-                                finishedText: 'Bitti',
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.event,
+                                  size: 16,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _formatDateRange(item.start, item.end),
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (_isSameDay(item.start, item.end))
+                              _CountdownBox(
                                 color: _endColor(item.end, now, context),
+                                child: _buildCountdownContent(
+                                  context: context,
+                                  label: 'Etkinliğe kalan',
+                                  target: item.end,
+                                  now: now,
+                                  finishedText: 'Bitti',
+                                  color: _endColor(item.end, now, context),
+                                ),
+                              )
+                            else ...[
+                              _CountdownBox(
+                                color: _startColor(item.start, now, context),
+                                child: _buildCountdownContent(
+                                  context: context,
+                                  label: 'Başlangıca kalan',
+                                  target: item.start,
+                                  now: now,
+                                  finishedText: 'Başladı',
+                                  color: _startColor(item.start, now, context),
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 8),
+                              _CountdownBox(
+                                color: _endColor(item.end, now, context),
+                                child: _buildCountdownContent(
+                                  context: context,
+                                  label: 'Bitişe kalan',
+                                  target: item.end,
+                                  now: now,
+                                  finishedText: 'Bitti',
+                                  color: _endColor(item.end, now, context),
+                                ),
+                              ),
+                            ],
+                            if (item.notes != null) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                item.notes!,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface.withOpacity(0.7),
+                                    ),
+                              ),
+                            ],
                           ],
-                          if (item.notes != null) ...[
-                            const SizedBox(height: 10),
-                            Text(
-                              item.notes!,
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withOpacity(0.7),
-                                  ),
-                            ),
-                          ],
-                        ],
+                        ),
                       ),
                     ),
                   );
@@ -404,7 +500,7 @@ class _HomeState extends State<Home> {
             Icon(Icons.circle, size: 8, color: color),
             const SizedBox(width: 6),
             Text(
-              label,
+              '$label - ${_remainingWeeksDays(target, now)}',
               style: textTheme.bodyMedium?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w600,
@@ -435,11 +531,6 @@ class _HomeState extends State<Home> {
                 ),
               ),
           ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Kalan: ' + _remainingWeeksDays(target, now),
-          style: textTheme.bodyMedium,
         ),
       ],
     );
